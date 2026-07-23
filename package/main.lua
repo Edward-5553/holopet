@@ -1033,19 +1033,19 @@ lv_obj_set_style_border_opa(APP.ui.session_context_panel, 190, MAIN)
 APP.ui.session_context_tag = lv_obj_create(APP.ui.session_context_panel)
 lv_obj_set_size(APP.ui.session_context_tag, 39, 18)
 lv_obj_set_pos(APP.ui.session_context_tag, 0, 0)
-set_bg(APP.ui.session_context_tag, C.rust, 255, 0)
+set_bg(APP.ui.session_context_tag, C.mint, 255, 0)
 
 APP.ui.session_context_tag_text = lv_label_create(APP.ui.session_context_tag)
 lv_obj_set_size(APP.ui.session_context_tag_text, 35, 14)
 lv_obj_set_pos(APP.ui.session_context_tag_text, 3, 2)
 style_text(APP.ui.session_context_tag_text, C.bg, FONT_10, ALIGN_LEFT)
-set_text(APP.ui.session_context_tag_text, T("CTX", "上下文"))
+set_text(APP.ui.session_context_tag_text, T("WEEK", "周额度"))
 
 APP.ui.session_context_percent = lv_label_create(APP.ui.session_context_panel)
 lv_obj_set_size(APP.ui.session_context_percent, 87, 14)
 lv_obj_set_pos(APP.ui.session_context_percent, 42, 2)
 style_text(APP.ui.session_context_percent, C.peach, FONT_10, ALIGN_RIGHT)
-set_text(APP.ui.session_context_percent, "--.-%")
+set_text(APP.ui.session_context_percent, "--%")
 
 APP.ui.session_context_track = lv_obj_create(APP.ui.session_context_panel)
 lv_obj_set_size(APP.ui.session_context_track, 124, 5)
@@ -1055,13 +1055,13 @@ set_bg(APP.ui.session_context_track, C.line, 190, 0)
 APP.ui.session_context_fill = lv_obj_create(APP.ui.session_context_track)
 lv_obj_set_size(APP.ui.session_context_fill, 1, 5)
 lv_obj_set_pos(APP.ui.session_context_fill, 0, 0)
-set_bg(APP.ui.session_context_fill, C.rust, 255, 0)
+set_bg(APP.ui.session_context_fill, C.mint, 255, 0)
 
 APP.ui.session_context_tokens = lv_label_create(APP.ui.session_context_panel)
 lv_obj_set_size(APP.ui.session_context_tokens, 124, 14)
 lv_obj_set_pos(APP.ui.session_context_tokens, 4, 29)
 style_text(APP.ui.session_context_tokens, C.dim, FONT_10, ALIGN_LEFT)
-set_text(APP.ui.session_context_tokens, T("-- / -- TOK", "-- / -- 词"))
+set_text(APP.ui.session_context_tokens, T("RESET --/--", "重置 --/--"))
 
 APP.ui.session_footer = lv_obj_create(APP.ui.session_page)
 lv_obj_set_size(APP.ui.session_footer, 302, 27)
@@ -1330,12 +1330,6 @@ local function set_session_meme(force)
   if swap_gif("session", meme.path, 0, 0) then APP.session_meme_loaded = meme.path end
 end
 
-local function compact_tokens(value)
-  local number = math.max(0, tonumber(value) or 0)
-  if number >= 1000000 then return string.format("%.1fM", number / 1000000) end
-  if number >= 1000 then return string.format("%.1fK", number / 1000) end
-  return tostring(math.floor(number + 0.5))
-end
 
 local function render_session()
   local remote = APP.remote
@@ -1354,20 +1348,19 @@ local function render_session()
   lv_obj_set_style_border_color(APP.ui.session_log_panel, accent, MAIN)
   lv_obj_set_style_border_color(APP.ui.session_meme_panel, accent, MAIN)
 
-  local context = remote.context or {}
-  local context_percent = tonumber(context.percent)
-  local context_color = C.rust
-  if context_percent and context_percent >= 90 then context_color = C.error
-  elseif context_percent and context_percent >= 75 then context_color = C.warn end
-  set_text(APP.ui.session_context_percent, context_percent and string.format("%.1f%%", context_percent) or "--.-%")
-  set_text(APP.ui.session_context_tokens, context_percent and (compact_tokens(context.used_tokens)
-    .. " / " .. compact_tokens(context.window_tokens)) or T("-- / -- TOK", "-- / -- 词"))
-  lv_obj_set_style_bg_color(APP.ui.session_context_tag, context_color, MAIN)
-  lv_obj_set_style_text_color(APP.ui.session_context_percent, context_color, MAIN)
-  lv_obj_set_style_border_color(APP.ui.session_context_panel, context_color, MAIN)
-  lv_obj_set_style_bg_color(APP.ui.session_context_fill, context_color, MAIN)
-  local context_width = context_percent and math.max(1, math.floor(124 * math.min(100, context_percent) / 100)) or 1
-  lv_obj_set_size(APP.ui.session_context_fill, context_width, 5)
+  local weekly_percent = percent(APP.usage.weekly_percent)
+  local quota_color = C.mint
+  if weekly_percent and weekly_percent >= 90 then quota_color = C.error
+  elseif weekly_percent and weekly_percent >= 70 then quota_color = C.warn end
+  set_text(APP.ui.session_context_percent, weekly_percent and (tostring(weekly_percent) .. "%") or "--%")
+  set_text(APP.ui.session_context_tokens, T("RESET ", "重置 ")
+    .. tostring(APP.usage.weekly_reset_text or "--/--"))
+  lv_obj_set_style_bg_color(APP.ui.session_context_tag, quota_color, MAIN)
+  lv_obj_set_style_text_color(APP.ui.session_context_percent, quota_color, MAIN)
+  lv_obj_set_style_border_color(APP.ui.session_context_panel, quota_color, MAIN)
+  lv_obj_set_style_bg_color(APP.ui.session_context_fill, quota_color, MAIN)
+  local quota_width = weekly_percent and math.max(1, math.floor(124 * weekly_percent / 100)) or 1
+  lv_obj_set_size(APP.ui.session_context_fill, quota_width, 5)
 
   local history = type(activity.history) == "table" and activity.history or {}
   for i = 1, 6 do
