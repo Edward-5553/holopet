@@ -316,7 +316,7 @@ function Web.new(opts)
     self:register(httpd.GET, self.api_prefix .. "/state", function() return json_response("200 OK", self:snapshot(true, "loaded")) end)
     self:register(httpd.GET, self.api_prefix .. "/page", function(req)
       local q = parse_query(req and req.query or "")
-      if self.set_page then pcall(self.set_page, q.name or "status") end
+      if self.set_page then pcall(self.set_page, "session") end
       return json_response("200 OK", self:snapshot(true, "page"))
     end)
     self:register(httpd.GET, self.api_prefix .. "/save", function(req) return self:save(req) end)

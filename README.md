@@ -1,8 +1,8 @@
 # Clawd Monitor for HoloCubic
 
-Clawd Monitor displays live Codex lifecycle state and local hourly weather on a
-320 x 240 HoloCubic. Every mascot frame is generated from the canonical 12 x 8
-sprite from clawdmoji project.
+Clawd Monitor displays the live Codex session on a 320 x 240 HoloCubic.
+The session page uses state-specific pixel animations inspired by the classic
+Agumon evolution line.
 
 <img width="976" height="268" alt="overview" src="https://github.com/user-attachments/assets/80f094e4-9e48-4746-961e-5b24cd0ace61" />
 
@@ -25,7 +25,7 @@ sprite from clawdmoji project.
   `/sd/apps/settings.json`. Its WebUI can override that choice with Chinese or
   English, or switch back to following the system. English uses the bundled
   monospaced `Clawd Console` face; Chinese uses the bundled `AIDA Noto Sans SC`
-  face. The same fixed language is passed to the screen, weather client, and
+  face. The same fixed language is passed to the screen and
   WebUI, and changing it automatically reloads the app.
 - A native application module rasterizes 10, 12, 14, 16, and 28 px text with
   horizontal RGB subpixel coverage, pre-composites it into RGB565, and sends the
@@ -41,24 +41,14 @@ sprite from clawdmoji project.
   the app reads the POSIX `timezone` value from `/sd/apps/settings.json`, applies
   it through the runtime time module, and honors configured DST transition rules.
 
-## Weather instrument
+## Session-only display
 
-The weather page reads the location already stored by the system in
-`/sd/apps/settings.json`. It resolves that city through Open-Meteo geocoding and
-requests current conditions plus 8 hours of hourly temperature, humidity,
-precipitation probability/amount, wind direction/speed, and gusts.
+The device opens directly to the session page and keeps the status and weather
+pages hidden. The session page shows the current Codex state, model, tool,
+context usage, event timeline, timers, and state-specific mascot animation.
 
-The device clock and weather location are intentionally configured separately:
-`timezone` controls the app clock, while `weather_address` selects the forecast
-location. Open-Meteo timestamps use the resolved city's IANA timezone; the
-`DATA` time is therefore local to the forecast city, while `SYNC` uses the
-device timezone.
-
-The hero animation is selected from 60 generated ClawdMoji scenes: 10 weather
-families multiplied by 6 temperature/humidity moods. The rail prioritizes the
-next three hours' rain probability/time and maximum gust, followed by four
-hourly cells. The last good forecast remains visible if a refresh fails.
-
+The left and right controls no longer switch pages. Up resets the session state,
+Down puts the monitor into sleep state, and Home exits the app.
 ## Connection
 
 ### Device package
@@ -217,4 +207,4 @@ The project code is available under the [MIT License](LICENSE).
 Clawd character artwork and Anthropic marks remain the property of Anthropic,
 PBC. This is an unofficial project and the MIT License does not grant rights to
 those characters or marks. See [ASSET-NOTICE.md](ASSET-NOTICE.md) for the
-upstream ClawdMoji attribution.
+upstream ClawdMoji attribution and the third-party character-art notice.

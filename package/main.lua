@@ -94,7 +94,7 @@ local APP = {
   event_visual_index = 1,
   visual_indices = {},
   last_event_signature = "",
-  page = "status",
+  page = "session",
   idle_index = 1,
   next_idle_ms = 0,
   idle_delay_ms = 0,
@@ -107,9 +107,6 @@ local APP = {
   weather_sync_text = "--:--",
   last_weather_updated_ms = 0,
   session_meme_loaded = nil,
-  session_meme_index = 1,
-  next_session_meme_ms = 0,
-  last_page_switch_ms = -1000,
   last_gc_ms = -1000,
   timing = {
     chat_start_ms = 0,
@@ -223,9 +220,6 @@ local IDLE_VISUALS = ClawdPack.events.Idle or {}
 
 local IDLE_MIN_MINUTES = 2
 local IDLE_MAX_MINUTES = 5
-local SESSION_MEME_MIN_MS = 60 * 1000
-local SESSION_MEME_MAX_MS = 150 * 1000
-local PAGE_SWITCH_COOLDOWN_MS = 1000
 local WEATHER_FALLBACK_REFRESH_MS = 15 * 60 * 1000
 local DEFAULT_TIMEZONE = "CST-8"
 local LOCAL_TIMEZONE = Timezone.read_settings(SETTINGS_PATH, DEFAULT_TIMEZONE)
@@ -266,18 +260,16 @@ local EVENT_ALIASES = {
   ["response_item:web_search_call"] = "PreToolUse",
 }
 
-local MEME_DIR = APP_DIR .. "/assets/clawdmoji/meme/"
-local SESSION_MEMES = {
-  { path = MEME_DIR .. "dealwithit.gif", label = T("DEAL WITH IT", "稳住能赢") },
-  { path = MEME_DIR .. "fire.gif", label = T("THIS IS FINE", "问题不大") },
-  { path = MEME_DIR .. "notclawd.gif", label = T("NOT ME", "不是我干的") },
-  { path = MEME_DIR .. "mariachi.gif", label = T("SHIP FIESTA", "发布派对") },
-  { path = MEME_DIR .. "surf.gif", label = T("SURFING IT", "浪里调试") },
-  { path = MEME_DIR .. "keyboard.gif", label = T("KEYBOARD SMASH", "键盘风暴") },
-  { path = MEME_DIR .. "popcorn.gif", label = T("POPCORN MODE", "吃瓜模式") },
-  { path = MEME_DIR .. "bonk.gif", label = T("BONK", "敲一下") },
-  { path = MEME_DIR .. "stonks.gif", label = T("STONKS", "一路上涨") },
-  { path = MEME_DIR .. "panic.gif", label = T("PANIC BUTTON", "紧急按钮") },
+local SESSION_VISUAL_DIR = APP_DIR .. "/assets/agumon/session/"
+local SESSION_STATE_VISUALS = {
+  idle = { path = SESSION_VISUAL_DIR .. "idle-koromon.gif", label = T("KOROMON // IDLE", "滚球兽 // 待命") },
+  sleeping = { path = SESSION_VISUAL_DIR .. "sleeping-koromon.gif", label = T("KOROMON // SLEEP", "滚球兽 // 休眠") },
+  thinking = { path = SESSION_VISUAL_DIR .. "thinking-agumon.gif", label = T("AGUMON // THINK", "亚古兽 // 思考") },
+  notification = { path = SESSION_VISUAL_DIR .. "notification-agumon.gif", label = T("AGUMON // ALERT", "亚古兽 // 待确认") },
+  working = { path = SESSION_VISUAL_DIR .. "working-greymon.gif", label = T("GREYMON // WORK", "暴龙兽 // 工作") },
+  building = { path = SESSION_VISUAL_DIR .. "building-metalgreymon.gif", label = T("METALGREYMON // BUILD", "机械暴龙兽 // 子任务") },
+  done = { path = SESSION_VISUAL_DIR .. "done-wargreymon.gif", label = T("WARGREYMON // DONE", "战斗暴龙兽 // 完成") },
+  error = { path = SESSION_VISUAL_DIR .. "error-skullgreymon.gif", label = T("SKULLGREYMON // ERROR", "丧尸暴龙兽 // 错误") },
 }
 
 local function refresh_language_tables()
@@ -299,14 +291,17 @@ local function refresh_language_tables()
   }
   for key, value in pairs(events) do EVENT_LABELS[key] = value end
 
-  local meme_labels = {
-    T("DEAL WITH IT", "稳住能赢"), T("THIS IS FINE", "问题不大"),
-    T("NOT ME", "不是我干的"), T("SHIP FIESTA", "发布派对"),
-    T("SURFING IT", "浪里调试"), T("KEYBOARD SMASH", "键盘风暴"),
-    T("POPCORN MODE", "吃瓜模式"), T("BONK", "敲一下"),
-    T("STONKS", "一路上涨"), T("PANIC BUTTON", "紧急按钮"),
+  local visual_labels = {
+    idle = T("KOROMON // IDLE", "滚球兽 // 待命"),
+    sleeping = T("KOROMON // SLEEP", "滚球兽 // 休眠"),
+    thinking = T("AGUMON // THINK", "亚古兽 // 思考"),
+    notification = T("AGUMON // ALERT", "亚古兽 // 待确认"),
+    working = T("GREYMON // WORK", "暴龙兽 // 工作"),
+    building = T("METALGREYMON // BUILD", "机械暴龙兽 // 子任务"),
+    done = T("WARGREYMON // DONE", "战斗暴龙兽 // 完成"),
+    error = T("SKULLGREYMON // ERROR", "丧尸暴龙兽 // 错误"),
   }
-  for index, value in ipairs(meme_labels) do SESSION_MEMES[index].label = value end
+  for state, value in pairs(visual_labels) do SESSION_STATE_VISUALS[state].label = value end
 end
 
 local ALLOWED_STATES = {
@@ -340,10 +335,6 @@ local function random_idle_delay_ms()
   return minutes * 60 * 1000
 end
 
-local function random_session_meme_delay_ms()
-  local ok, value = pcall(math.random, SESSION_MEME_MIN_MS, SESSION_MEME_MAX_MS)
-  return ok and tonumber(value) or SESSION_MEME_MIN_MS
-end
 
 local function random_visual_index(group, count)
   count = tonumber(count) or 0
@@ -1331,30 +1322,11 @@ local function set_weather_visual(kind, mood)
   if swap_gif("weather", source, 0, 0) then APP.weather_visual_loaded = source end
 end
 
-local function session_meme_candidates(state)
-  if state == "error" then return { 2, 8, 10 } end
-  if state == "done" then return { 1, 4, 9 } end
-  if state == "building" then return { 4, 6, 9 } end
-  if state == "notification" then return { 1, 3, 10 } end
-  if state == "thinking" then return { 3, 7, 8 } end
-  if state == "working" then return { 2, 5, 6, 7, 10 } end
-  return { 5, 4, 3, 1, 7, 9 }
-end
-
 local function set_session_meme(force)
-  if #SESSION_MEMES == 0 then return end
-  local ts = now_ms()
-  if not force and APP.next_session_meme_ms > ts then return end
-  local candidates = session_meme_candidates(APP.remote.state)
-  local ok, slot = pcall(math.random, 1, #candidates)
-  local index = candidates[ok and slot or 1] or 1
-  if #candidates > 1 and index == APP.session_meme_index then
-    index = candidates[((ok and slot or 1) % #candidates) + 1]
-  end
-  APP.session_meme_index = index
-  APP.next_session_meme_ms = ts + random_session_meme_delay_ms()
-  local meme = SESSION_MEMES[index]
-  if APP.page ~= "session" or APP.session_meme_loaded == meme.path then return end
+  local state = tostring(APP.remote.state or "idle")
+  local meme = SESSION_STATE_VISUALS[state] or SESSION_STATE_VISUALS.idle
+  if APP.page ~= "session" or (not force and APP.session_meme_loaded == meme.path) then return end
+  if force then APP.session_meme_loaded = nil end
   if swap_gif("session", meme.path, 0, 0) then APP.session_meme_loaded = meme.path end
 end
 
@@ -1566,43 +1538,25 @@ local function render_weather()
 end
 
 local function show_page(name)
-  if name ~= "weather" and name ~= "session" then name = "status" end
   local previous_page = APP.page
-  APP.page = name
+  APP.page = "session"
+  APP.session_meme_loaded = nil
+  render_session()
 
-  -- Prepare the target page while it is still hidden. The previous page stays
-  -- visible until the target GIF has decoded its first frame.
-  if name == "weather" then
-    APP.weather_visual_loaded = nil
-    render_weather()
-    if APP.weather and (not APP.weather.state.valid or APP.weather.state.stale) then APP.weather:fetch() end
-  elseif name == "session" then
-    APP.session_meme_loaded = nil
-    APP.next_session_meme_ms = 0
-    render_session()
-  else
+  -- The device now has one purpose-built screen. Keep the old page objects
+  -- hidden for compatibility with existing installs and WebUI clients, but do
+  -- not allow any route or key event to reveal them.
+  set_hidden(APP.ui.status_page, true)
+  set_hidden(APP.ui.weather_page, true)
+  set_hidden(APP.ui.session_page, false)
+
+  if previous_page ~= "session" then
+    clear_gif_slot("status")
+    clear_gif_slot("weather")
     APP.status_visual_loaded = nil
-    set_visual(APP.remote.state)
-  end
-
-  set_hidden(APP.ui.status_page, name ~= "status")
-  set_hidden(APP.ui.weather_page, name ~= "weather")
-  set_hidden(APP.ui.session_page, name ~= "session")
-
-  if previous_page ~= name then
-    if previous_page == "status" then
-      clear_gif_slot("status")
-      APP.status_visual_loaded = nil
-    elseif previous_page == "weather" then
-      clear_gif_slot("weather")
-      APP.weather_visual_loaded = nil
-    elseif previous_page == "session" then
-      clear_gif_slot("session")
-      APP.session_meme_loaded = nil
-    end
+    APP.weather_visual_loaded = nil
   end
 end
-
 local function update_labels()
   local remote = APP.remote
   local state = remote.state
@@ -1754,29 +1708,8 @@ local function start_client()
 end
 
 local function bind_keys()
-  local function tilt_show_page(name)
-    local ts = now_ms()
-    if ts - (APP.last_page_switch_ms or -PAGE_SWITCH_COOLDOWN_MS) < PAGE_SWITCH_COOLDOWN_MS then return end
-    APP.last_page_switch_ms = ts
-    show_page(name)
-  end
-
-  key.on(key.LEFT, function(event_type)
-    if event_type == key.START or event_type == key.SHORT then
-      if APP.page == "session" then tilt_show_page("status")
-      else tilt_show_page("weather") end
-    end
-  end)
-
-  key.on(key.RIGHT, function(event_type)
-    if event_type == key.START or event_type == key.SHORT then
-      if APP.page == "weather" then tilt_show_page("status")
-      else tilt_show_page("session") end
-    end
-  end)
-
   key.on(key.UP, function(event_type)
-    if event_type == key.SHORT and APP.page == "status" then
+    if event_type == key.SHORT and APP.page == "session" then
       APP.remote.event = "ManualReset"
       APP.remote.tool = ""
       apply_remote_state("idle")
@@ -1784,7 +1717,7 @@ local function bind_keys()
   end)
 
   key.on(key.DOWN, function(event_type)
-    if event_type == key.SHORT and APP.page == "status" then
+    if event_type == key.SHORT and APP.page == "session" then
       APP.remote.event = "ManualSleep"
       APP.remote.tool = ""
       apply_remote_state("sleeping")
@@ -1798,7 +1731,6 @@ local function bind_keys()
     end
   end)
 end
-
 function APP.stop(reason)
   if not APP.running then return end
   APP.running = false
@@ -1863,6 +1795,7 @@ local initial_weather_slot = weather_quarter_slot()
 if initial_weather_slot then APP.last_weather_sync_slot = initial_weather_slot end
 APP.next_weather_ms = now_ms() + WEATHER_FALLBACK_REFRESH_MS
 bind_keys()
+show_page("session")
 
 APP.web = HoloWeb.new({
   language = UI_LANG,
@@ -1893,7 +1826,9 @@ APP.web = HoloWeb.new({
       APP.weather:fetch()
     end
   end,
-  set_page = show_page,
+  set_page = function()
+    show_page("session")
+  end,
   connection_state = function()
     local chat_text, state_text = timer_display_texts()
     return {
@@ -1920,7 +1855,7 @@ APP.web = HoloWeb.new({
       weather_visual = APP.current_weather_visual,
       weather_sync = APP.weather_sync_text,
       activity = APP.remote.activity,
-      session_meme = SESSION_MEMES[APP.session_meme_index] and SESSION_MEMES[APP.session_meme_index].label or "",
+      session_meme = (SESSION_STATE_VISUALS[APP.remote.state] or SESSION_STATE_VISUALS.idle).label,
       font = {
         family = CONSOLE and CONSOLE.ready and CONSOLE.family or "LVGL Montserrat",
         source = CONSOLE and CONSOLE.ready and CONSOLE.source or "builtin font fallback",

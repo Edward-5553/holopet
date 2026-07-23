@@ -35,3 +35,11 @@ The `package/font/aida_noto_sans_sc.ttf` asset is the bundled CJK-safe
 fallback font shared with AIDA Monitor. It is based on Adobe Source Han Sans /
 Noto Sans CJK and licensed under the SIL Open Font License 1.1. The full font
 license is included at `package/font/AIDA-NOTO-OFL.txt`.
+
+# Digimon-inspired session artwork notice
+
+The generated pixel-art assets under `package/assets/agumon` are unofficial fan
+art inspired by Digimon character designs. Digimon, Agumon, and related names,
+characters, and marks are third-party intellectual property. These assets are
+not covered by this repository's MIT License, and this project is not affiliated
+with or endorsed by their rights holders.

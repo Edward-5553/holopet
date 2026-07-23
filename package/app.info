@@ -2,5 +2,5 @@ name = Clawd Monitor
 kind = app
 entry = main.lua
 icon = main.png
-description = Codex status companion with weather and session monitor
+description = Codex session monitor
 version = 1.4.0
