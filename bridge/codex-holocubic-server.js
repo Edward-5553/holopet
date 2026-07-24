@@ -11,7 +11,8 @@ const HOST = process.env.HOLOCUBIC_BRIDGE_HOST || "0.0.0.0";
 const PORT = Number(process.env.HOLOCUBIC_BRIDGE_PORT || 17321);
 const MAX_BODY = 64 * 1024;
 const MAX_SESSION_TAIL = 8 * 1024 * 1024;
-const HISTORY_LIMIT = 6;
+// Keep the current event plus enough entries to fill all six history rows.
+const HISTORY_LIMIT = 7;
 const CODEX_HOME = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
 const SESSIONS_DIR = path.join(CODEX_HOME, "sessions");
 const clients = new Set();

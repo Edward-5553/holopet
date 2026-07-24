@@ -993,8 +993,8 @@ for i = 1, 6 do
   local row = lv_label_create(APP.ui.session_log_panel)
   lv_obj_set_size(row, 158, 17)
   lv_obj_set_pos(row, 5, 31 + (i - 1) * 24)
-  style_text(row, i == 6 and C.peach or C.dim, FONT_12, ALIGN_LEFT)
-  set_text(row, i == 1 and T("> waiting for events", "> 等待事件") or "|")
+  style_text(row, C.dim, FONT_12, ALIGN_LEFT)
+  set_text(row, i == 1 and T("| waiting for events", "| 等待事件") or "|")
   APP.ui.session_timeline[i] = row
 end
 
@@ -1366,17 +1366,25 @@ local function render_session()
   lv_obj_set_size(APP.ui.session_quota_fill, quota_width, 5)
 
   local history = type(activity.history) == "table" and activity.history or {}
+  local history_end = #history
+  local latest = history[history_end]
+  if type(latest) == "table"
+      and (EVENT_ALIASES[latest.event] or latest.event) == canonical
+      and tostring(latest.tool or "") == tostring(remote.tool or "")
+      and tostring(latest.state or "") == tostring(state) then
+    history_end = history_end - 1
+  end
   for i = 1, 6 do
     local row = APP.ui.session_timeline[i]
-    local item = history[i]
+    local item = history[history_end - i + 1]
     if type(item) == "table" then
       local event = EVENT_ALIASES[item.event] or item.event
       local label = EVENT_LABELS[event] or STATE_LABELS[item.state] or tostring(event or T("EVENT", "事件"))
       local detail = tostring(item.tool or "")
-      set_text(row, (i == #history and "> " or "| ") .. clip(label .. (detail ~= "" and ("  " .. detail) or ""), 19))
-      lv_obj_set_style_text_color(row, item.state == "error" and C.error or (i == #history and accent or C.dim), MAIN)
+      set_text(row, "| " .. clip(label .. (detail ~= "" and ("  " .. detail) or ""), 19))
+      lv_obj_set_style_text_color(row, item.state == "error" and C.error or C.dim, MAIN)
     else
-      set_text(row, i == 1 and T("> waiting for events", "> 等待事件") or "|")
+      set_text(row, i == 1 and T("| waiting for events", "| 等待事件") or "|")
       lv_obj_set_style_text_color(row, C.dim, MAIN)
     end
   end
