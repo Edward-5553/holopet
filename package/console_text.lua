@@ -75,11 +75,12 @@ function ConsoleText:create_canvas(parent, width, height)
   return ok and canvas or nil
 end
 
-function ConsoleText:raster(text, width, height, size, color, background, align)
+function ConsoleText:raster(text, width, height, size, color, background, align, bold)
   if not self.ready or not self.module then return nil, self.error end
   width, height = math.max(1, math.floor(width or 1)), math.max(1, math.floor(height or 1))
   local options = {
     align = tonumber(align) or 0,
+    bold = bold == true,
     opaque = true,
     subpixel = 1,
   }

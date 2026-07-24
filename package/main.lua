@@ -173,6 +173,7 @@ local C = {
   cream = 0xFFF3E8,
   dim = 0x9A7564,
   mint = 0x8FE0C7,
+  blue = 0x356AA0,
   warn = 0xFFD166,
   error = 0xFF6B6B,
 }
@@ -450,6 +451,7 @@ local function lv_label_create(parent)
     color = C.cream,
     background = C.bg,
     align = ALIGN_LEFT,
+    bold = false,
     fallback_font = FALLBACK_FONT_12,
     text = nil,
     canvas = nil,
@@ -522,7 +524,8 @@ render_console_text = function(token)
     if lv_obj_set_style_bg_opa then pcall(lv_obj_set_style_bg_opa, token.canvas, 0, MAIN) end
   end
   local data, raster_error = CONSOLE:raster(token.text, token.width, token.height,
-    token.render_size or token.size, token.color, token.background, compositor_align(token.align))
+    token.render_size or token.size, token.color, token.background,
+    compositor_align(token.align), token.bold)
   if not data then
     disable_console(raster_error)
     return false
@@ -545,7 +548,7 @@ local function set_bg(obj, color, opa, radius)
   if lv_obj_set_style_pad_all then lv_obj_set_style_pad_all(obj, 0, MAIN) end
 end
 
-local function style_text(obj, color, font, align)
+local function style_text(obj, color, font, align, bold)
   local font_role = type(font) == "table" and font or { size = 12, fallback = font }
   if is_console_text(obj) then
     obj.color = tonumber(color) or C.cream
@@ -554,6 +557,7 @@ local function style_text(obj, color, font, align)
     obj.y_offset = tonumber(font_role.y_offset) or 0
     obj.fallback_font = font_role.fallback or FALLBACK_FONT_12
     obj.align = align or ALIGN_LEFT
+    obj.bold = bold == true
     if obj.native then
       raw_lv_obj_set_style_text_color(obj.native, obj.color, MAIN)
       raw_lv_obj_set_style_text_font(obj.native, obj.fallback_font, MAIN)
@@ -967,21 +971,9 @@ lv_obj_set_style_border_width(APP.ui.session_log_panel, 1, MAIN)
 lv_obj_set_style_border_color(APP.ui.session_log_panel, C.line, MAIN)
 lv_obj_set_style_border_opa(APP.ui.session_log_panel, 200, MAIN)
 
-APP.ui.session_project = lv_label_create(APP.ui.session_log_panel)
-lv_obj_set_size(APP.ui.session_project, 92, 16)
-lv_obj_set_pos(APP.ui.session_project, 4, 1)
-style_text(APP.ui.session_project, C.rust, FONT_12, ALIGN_LEFT)
-set_text(APP.ui.session_project, T("MODEL --", "模型 --"))
-
-APP.ui.session_model = lv_label_create(APP.ui.session_log_panel)
-lv_obj_set_size(APP.ui.session_model, 65, 16)
-lv_obj_set_pos(APP.ui.session_model, 98, 1)
-style_text(APP.ui.session_model, C.rust, FONT_12, ALIGN_RIGHT)
-set_text(APP.ui.session_model, "")
-
 APP.ui.session_state_segment = lv_obj_create(APP.ui.session_log_panel)
 lv_obj_set_size(APP.ui.session_state_segment, 166, 27)
-lv_obj_set_pos(APP.ui.session_state_segment, 0, 19)
+lv_obj_set_pos(APP.ui.session_state_segment, 0, 0)
 set_bg(APP.ui.session_state_segment, C.rust, 255, 0)
 
 APP.ui.session_state = lv_label_create(APP.ui.session_state_segment)
@@ -1000,14 +992,14 @@ APP.ui.session_timeline = {}
 for i = 1, 6 do
   local row = lv_label_create(APP.ui.session_log_panel)
   lv_obj_set_size(row, 158, 17)
-  lv_obj_set_pos(row, 5, 50 + (i - 1) * 20)
+  lv_obj_set_pos(row, 5, 31 + (i - 1) * 24)
   style_text(row, i == 6 and C.peach or C.dim, FONT_12, ALIGN_LEFT)
   set_text(row, i == 1 and T("> waiting for events", "> 等待事件") or "|")
   APP.ui.session_timeline[i] = row
 end
 
 APP.ui.session_meme_panel = lv_obj_create(APP.ui.session_page)
-lv_obj_set_size(APP.ui.session_meme_panel, 132, 132)
+lv_obj_set_size(APP.ui.session_meme_panel, 132, 181)
 lv_obj_set_pos(APP.ui.session_meme_panel, 180, 24)
 set_bg(APP.ui.session_meme_panel, C.panel, 255, 0)
 lv_obj_set_style_border_width(APP.ui.session_meme_panel, 2, MAIN)
@@ -1017,78 +1009,62 @@ lv_obj_set_style_border_opa(APP.ui.session_meme_panel, 230, MAIN)
 APP.ui.session_gifs = {}
 for i = 1, 2 do
   local gif = lv_gif_create(APP.ui.session_meme_panel)
-  lv_obj_set_pos(gif, 0, 0)
+  lv_obj_set_pos(gif, 0, 26)
   set_hidden(gif, i ~= 1)
   APP.ui.session_gifs[i] = gif
 end
 
-APP.ui.session_context_panel = lv_obj_create(APP.ui.session_page)
-lv_obj_set_size(APP.ui.session_context_panel, 132, 46)
-lv_obj_set_pos(APP.ui.session_context_panel, 180, 159)
-set_bg(APP.ui.session_context_panel, C.bg, 255, 0)
-lv_obj_set_style_border_width(APP.ui.session_context_panel, 1, MAIN)
-lv_obj_set_style_border_color(APP.ui.session_context_panel, C.line, MAIN)
-lv_obj_set_style_border_opa(APP.ui.session_context_panel, 190, MAIN)
+APP.ui.session_quota_panel = lv_obj_create(APP.ui.session_page)
+lv_obj_set_size(APP.ui.session_quota_panel, 168, 27)
+lv_obj_set_pos(APP.ui.session_quota_panel, 9, 208)
+set_bg(APP.ui.session_quota_panel, C.panel, 255, 0)
+lv_obj_set_style_border_width(APP.ui.session_quota_panel, 1, MAIN)
+lv_obj_set_style_border_color(APP.ui.session_quota_panel, C.line, MAIN)
+lv_obj_set_style_border_opa(APP.ui.session_quota_panel, 190, MAIN)
 
-APP.ui.session_context_tag = lv_obj_create(APP.ui.session_context_panel)
-lv_obj_set_size(APP.ui.session_context_tag, 39, 18)
-lv_obj_set_pos(APP.ui.session_context_tag, 0, 0)
-set_bg(APP.ui.session_context_tag, C.mint, 255, 0)
+APP.ui.session_quota_tag = lv_obj_create(APP.ui.session_quota_panel)
+lv_obj_set_size(APP.ui.session_quota_tag, 33, 25)
+lv_obj_set_pos(APP.ui.session_quota_tag, 0, 0)
+set_bg(APP.ui.session_quota_tag, C.mint, 255, 0)
 
-APP.ui.session_context_tag_text = lv_label_create(APP.ui.session_context_tag)
-lv_obj_set_size(APP.ui.session_context_tag_text, 35, 16)
-lv_obj_set_pos(APP.ui.session_context_tag_text, 3, 1)
-style_text(APP.ui.session_context_tag_text, C.bg, FONT_12, ALIGN_LEFT)
-set_text(APP.ui.session_context_tag_text, T("WEEK", "周额度"))
+APP.ui.session_quota_tag_text = lv_label_create(APP.ui.session_quota_tag)
+lv_obj_set_size(APP.ui.session_quota_tag_text, 32, 17)
+lv_obj_set_pos(APP.ui.session_quota_tag_text, 1, 4)
+style_text(APP.ui.session_quota_tag_text, C.bg, FONT_12, ALIGN_LEFT)
+set_text(APP.ui.session_quota_tag_text, T("WEEK", "周额度"))
 
-APP.ui.session_context_percent = lv_label_create(APP.ui.session_context_panel)
-lv_obj_set_size(APP.ui.session_context_percent, 87, 16)
-lv_obj_set_pos(APP.ui.session_context_percent, 42, 1)
-style_text(APP.ui.session_context_percent, C.peach, FONT_12, ALIGN_RIGHT)
-set_text(APP.ui.session_context_percent, "--%")
+APP.ui.session_quota_percent = lv_label_create(APP.ui.session_quota_panel)
+lv_obj_set_size(APP.ui.session_quota_percent, 34, 17)
+lv_obj_set_pos(APP.ui.session_quota_percent, 34, 4)
+style_text(APP.ui.session_quota_percent, C.mint, FONT_12, ALIGN_RIGHT)
+set_text(APP.ui.session_quota_percent, "--%")
 
-APP.ui.session_context_track = lv_obj_create(APP.ui.session_context_panel)
-lv_obj_set_size(APP.ui.session_context_track, 124, 5)
-lv_obj_set_pos(APP.ui.session_context_track, 4, 21)
-set_bg(APP.ui.session_context_track, C.line, 190, 0)
+APP.ui.session_quota_track = lv_obj_create(APP.ui.session_quota_panel)
+lv_obj_set_size(APP.ui.session_quota_track, 42, 5)
+lv_obj_set_pos(APP.ui.session_quota_track, 71, 10)
+set_bg(APP.ui.session_quota_track, C.line, 190, 0)
 
-APP.ui.session_context_fill = lv_obj_create(APP.ui.session_context_track)
-lv_obj_set_size(APP.ui.session_context_fill, 1, 5)
-lv_obj_set_pos(APP.ui.session_context_fill, 0, 0)
-set_bg(APP.ui.session_context_fill, C.mint, 255, 0)
+APP.ui.session_quota_fill = lv_obj_create(APP.ui.session_quota_track)
+lv_obj_set_size(APP.ui.session_quota_fill, 1, 5)
+lv_obj_set_pos(APP.ui.session_quota_fill, 0, 0)
+set_bg(APP.ui.session_quota_fill, C.mint, 255, 0)
 
-APP.ui.session_context_tokens = lv_label_create(APP.ui.session_context_panel)
-lv_obj_set_size(APP.ui.session_context_tokens, 124, 16)
-lv_obj_set_pos(APP.ui.session_context_tokens, 4, 28)
-style_text(APP.ui.session_context_tokens, C.dim, FONT_12, ALIGN_LEFT)
-set_text(APP.ui.session_context_tokens, T("RESET --/--", "重置 --/--"))
+APP.ui.session_quota_reset = lv_label_create(APP.ui.session_quota_panel)
+lv_obj_set_size(APP.ui.session_quota_reset, 48, 17)
+lv_obj_set_pos(APP.ui.session_quota_reset, 116, 4)
+style_text(APP.ui.session_quota_reset, C.dim, FONT_12, ALIGN_RIGHT, true)
+set_text(APP.ui.session_quota_reset, "R--/--")
 
-APP.ui.session_footer = lv_obj_create(APP.ui.session_page)
-lv_obj_set_size(APP.ui.session_footer, 302, 27)
-lv_obj_set_pos(APP.ui.session_footer, 9, 208)
-set_bg(APP.ui.session_footer, C.panel, 255, 0)
-lv_obj_set_style_border_width(APP.ui.session_footer, 1, MAIN)
-lv_obj_set_style_border_color(APP.ui.session_footer, C.line, MAIN)
-lv_obj_set_style_border_opa(APP.ui.session_footer, 190, MAIN)
+APP.ui.session_model_panel = lv_obj_create(APP.ui.session_page)
+lv_obj_set_size(APP.ui.session_model_panel, 132, 27)
+lv_obj_set_pos(APP.ui.session_model_panel, 180, 208)
+set_bg(APP.ui.session_model_panel, C.blue, 255, 0)
 
-local session_footer_specs = {
-  { key = "session_chat", x = 0, w = 78, color = C.line, text = T("C CHAT", "对话 --") },
-  { key = "session_tools", x = 78, w = 74, color = C.rust, text = T("TOOL 00", "工具 00") },
-  { key = "session_errors", x = 152, w = 65, color = C.panel, text = T("ERR 00", "错误 00") },
-  { key = "session_agents", x = 217, w = 84, color = C.line, text = T("AGENT 0", "子任务 0") },
-}
-for _, spec in ipairs(session_footer_specs) do
-  local segment = lv_obj_create(APP.ui.session_footer)
-  lv_obj_set_size(segment, spec.w, 25)
-  lv_obj_set_pos(segment, spec.x, 0)
-  set_bg(segment, spec.color, 255, 0)
-  local label = lv_label_create(segment)
-  lv_obj_set_size(label, spec.w - 6, 17)
-  lv_obj_set_pos(label, 3, 4)
-  style_text(label, spec.key == "session_tools" and C.bg or C.cream, FONT_12, ALIGN_LEFT)
-  set_text(label, spec.text)
-  APP.ui[spec.key] = label
-end
+APP.ui.session_model_text = lv_label_create(APP.ui.session_model_panel)
+lv_obj_set_size(APP.ui.session_model_text, 128, 17)
+lv_obj_set_pos(APP.ui.session_model_text, 2, 4)
+style_text(APP.ui.session_model_text, C.cream, FONT_12, ALIGN_RIGHT, true)
+set_text(APP.ui.session_model_text, T("MODEL [--]", "模型 [--]"))
 
 local function visual_color(state)
   if state == "error" then return C.error end
@@ -1096,6 +1072,28 @@ local function visual_color(state)
   if state == "done" then return C.mint end
   if state == "thinking" or state == "working" or state == "building" then return C.peach end
   return C.cream
+end
+
+local function effort_colors(effort)
+  local value = string.lower(tostring(effort or ""))
+  if value == "minimal" or value == "low" then return C.mint, C.bg end
+  if value == "medium" then return C.blue, C.cream end
+  if value == "high" then return C.warn, C.bg end
+  if value == "xhigh" then return C.rust, C.bg end
+  if value == "max" or value == "ultra" then return C.error, C.bg end
+  return C.blue, C.cream
+end
+
+local function effort_label(effort)
+  local value = string.lower(tostring(effort or ""))
+  if value == "minimal" then return "[Minimal]" end
+  if value == "low" then return "[Low]" end
+  if value == "medium" then return "[Medium]" end
+  if value == "high" then return "[High]" end
+  if value == "xhigh" then return "[XHigh]" end
+  if value == "max" then return "[Max]" end
+  if value == "ultra" then return "[Ultra]" end
+  return "[--]"
 end
 
 local function visual_group(state, event)
@@ -1327,7 +1325,7 @@ local function set_session_meme(force)
   local meme = SESSION_STATE_VISUALS[state] or SESSION_STATE_VISUALS.idle
   if APP.page ~= "session" or (not force and APP.session_meme_loaded == meme.path) then return end
   if force then APP.session_meme_loaded = nil end
-  if swap_gif("session", meme.path, 0, 0) then APP.session_meme_loaded = meme.path end
+  if swap_gif("session", meme.path, 0, 26) then APP.session_meme_loaded = meme.path end
 end
 
 
@@ -1340,8 +1338,14 @@ local function render_session()
   local state_label = EVENT_LABELS[canonical] or STATE_LABELS[state] or string.upper(state)
   local tool = remote.tool ~= "" and remote.tool or string.lower(state_label)
 
-  set_text(APP.ui.session_project, clip(remote.model ~= "" and remote.model or T("MODEL --", "模型 --"), 13))
-  set_text(APP.ui.session_model, remote.effort ~= "" and ("[" .. string.upper(clip(remote.effort, 7)) .. "]") or "")
+  local model_text = remote.model ~= "" and remote.model or T("MODEL --", "模型 --")
+  model_text = tostring(model_text):gsub("^[Gg][Pp][Tt]%-", "")
+  local effort_text = effort_label(remote.effort)
+  set_text(APP.ui.session_model_text,
+    clip(model_text, math.max(1, 15 - #effort_text)) .. " " .. effort_text)
+  local effort_bg, effort_fg = effort_colors(remote.effort)
+  lv_obj_set_style_bg_color(APP.ui.session_model_panel, effort_bg, MAIN)
+  lv_obj_set_style_text_color(APP.ui.session_model_text, effort_fg, MAIN)
   set_text(APP.ui.session_state, clip(state_label, 8))
   set_text(APP.ui.session_tool, "$ " .. clip(tool, 9))
   lv_obj_set_style_bg_color(APP.ui.session_state_segment, accent, MAIN)
@@ -1352,15 +1356,14 @@ local function render_session()
   local quota_color = C.mint
   if weekly_percent and weekly_percent >= 90 then quota_color = C.error
   elseif weekly_percent and weekly_percent >= 70 then quota_color = C.warn end
-  set_text(APP.ui.session_context_percent, weekly_percent and (tostring(weekly_percent) .. "%") or "--%")
-  set_text(APP.ui.session_context_tokens, T("RESET ", "重置 ")
-    .. tostring(APP.usage.weekly_reset_text or "--/--"))
-  lv_obj_set_style_bg_color(APP.ui.session_context_tag, quota_color, MAIN)
-  lv_obj_set_style_text_color(APP.ui.session_context_percent, quota_color, MAIN)
-  lv_obj_set_style_border_color(APP.ui.session_context_panel, quota_color, MAIN)
-  lv_obj_set_style_bg_color(APP.ui.session_context_fill, quota_color, MAIN)
-  local quota_width = weekly_percent and math.max(1, math.floor(124 * weekly_percent / 100)) or 1
-  lv_obj_set_size(APP.ui.session_context_fill, quota_width, 5)
+  set_text(APP.ui.session_quota_percent, weekly_percent and (tostring(weekly_percent) .. "%") or "--%")
+  set_text(APP.ui.session_quota_reset, "R" .. tostring(APP.usage.weekly_reset_text or "--/--"))
+  lv_obj_set_style_bg_color(APP.ui.session_quota_tag, quota_color, MAIN)
+  lv_obj_set_style_text_color(APP.ui.session_quota_percent, quota_color, MAIN)
+  lv_obj_set_style_border_color(APP.ui.session_quota_panel, quota_color, MAIN)
+  lv_obj_set_style_bg_color(APP.ui.session_quota_fill, quota_color, MAIN)
+  local quota_width = weekly_percent and math.max(1, math.floor(42 * weekly_percent / 100)) or 1
+  lv_obj_set_size(APP.ui.session_quota_fill, quota_width, 5)
 
   local history = type(activity.history) == "table" and activity.history or {}
   for i = 1, 6 do
@@ -1378,12 +1381,6 @@ local function render_session()
     end
   end
 
-  local chat_text = timer_display_texts()
-  set_text(APP.ui.session_chat, chat_text ~= "" and chat_text or "C --:--")
-  set_text(APP.ui.session_tools, T("TOOL ", "工具 ") .. string.format("%02d", tonumber(activity.tool_count) or 0))
-  set_text(APP.ui.session_errors, T("ERR ", "错误 ") .. string.format("%02d", tonumber(activity.error_count) or 0))
-  set_text(APP.ui.session_agents, T("AGENT ", "子任务 ") .. tostring(tonumber(activity.subagent_count) or remote.subagent_count or 0))
-  lv_obj_set_style_text_color(APP.ui.session_errors, (tonumber(activity.error_count) or 0) > 0 and C.error or C.cream, MAIN)
   set_session_meme(false)
 end
 

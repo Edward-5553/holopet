@@ -45,7 +45,9 @@ Agumon evolution line.
 
 The device opens directly to the session page and keeps the status and weather
 pages hidden. The session page shows the current Codex state, model, tool,
-weekly quota usage, event timeline, timers, and state-specific mascot animation.
+event timeline, an expanded state-specific mascot animation, and weekly quota
+usage with its reset date in the bottom bar. The model and reasoning effort sit
+below the animation, with the background color reflecting the effort level.
 
 The left and right controls no longer switch pages. Up resets the session state,
 Down puts the monitor into sleep state, and Home exits the app.
