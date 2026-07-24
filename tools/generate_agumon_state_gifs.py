@@ -15,7 +15,13 @@ SOURCE_DIR = ROOT / "art" / "agumon-states" / "png"
 OUTPUT_DIR = ROOT / "package" / "assets" / "agumon" / "session"
 PREVIEW_PATH = ROOT / "art" / "agumon-states" / "agumon-state-animated-preview.gif"
 
+# Existing source art is 128 x 128, while every runtime GIF uses the fixed
+# portrait canvas reserved by the session UI. Keeping these dimensions separate
+# lets future wide or tall frame sequences share the same display area without
+# being stretched.
 SIZE = 128
+CANVAS_WIDTH = 130
+CANVAS_HEIGHT = 180
 FRAME_COUNT = 20
 FRAME_DURATION_MS = 95
 CHROMA_KEY = (255, 0, 255)
@@ -32,12 +38,39 @@ STATE_NAMES = [
     "error-skullgreymon",
 ]
 
+SOURCE_SIZES = {
+    "thinking-agumon": (CANVAS_WIDTH, CANVAS_HEIGHT),
+    "notification-agumon": (CANVAS_WIDTH, CANVAS_HEIGHT),
+}
+
+POSE_NAMES = {
+    "thinking-agumon-ponder",
+    "thinking-agumon-idea",
+    "notification-agumon-wait",
+    "notification-agumon-prompt",
+}
+
 
 def load_sprite(name: str) -> Image.Image:
     path = SOURCE_DIR / f"{name}.png"
     image = Image.open(path).convert("RGBA")
-    if image.size != (SIZE, SIZE):
-        raise ValueError(f"{path} must be {SIZE}x{SIZE}, got {image.size}")
+    expected_size = SOURCE_SIZES.get(name, (SIZE, SIZE))
+    if image.size != expected_size:
+        raise ValueError(f"{path} must be {expected_size[0]}x{expected_size[1]}, got {image.size}")
+    if image.getchannel("A").getbbox() is None:
+        raise ValueError(f"{path} has no visible pixels")
+    return image
+
+
+def load_pose(name: str) -> Image.Image:
+    if name not in POSE_NAMES:
+        raise ValueError(f"unknown animation pose: {name}")
+    path = SOURCE_DIR / f"{name}.png"
+    image = Image.open(path).convert("RGBA")
+    if image.size != (CANVAS_WIDTH, CANVAS_HEIGHT):
+        raise ValueError(
+            f"{path} must be {CANVAS_WIDTH}x{CANVAS_HEIGHT}, got {image.size}"
+        )
     if image.getchannel("A").getbbox() is None:
         raise ValueError(f"{path} has no visible pixels")
     return image
@@ -50,6 +83,7 @@ def transformed(
     dy: int = 0,
     scale_x: float = 1.0,
     scale_y: float = 1.0,
+    resample: Image.Resampling = Image.Resampling.NEAREST,
 ) -> Image.Image:
     """Transform only the visible sprite, preserving its original floor line."""
     bbox = source.getchannel("A").getbbox()
@@ -59,7 +93,7 @@ def transformed(
     width = max(1, round(subject.width * scale_x))
     height = max(1, round(subject.height * scale_y))
     if (width, height) != subject.size:
-        subject = subject.resize((width, height), Image.Resampling.NEAREST)
+        subject = subject.resize((width, height), resample)
 
     center_x = (bbox[0] + bbox[2]) / 2
     left = round(center_x - width / 2 + dx)
@@ -85,11 +119,41 @@ def z_glyph(draw: ImageDraw.ImageDraw, x: int, y: int, scale: int, color: tuple[
 
 
 def idle_frames(source: Image.Image) -> list[Image.Image]:
-    frames = []
-    for index in range(FRAME_COUNT):
-        wave = math.sin(index * math.tau / FRAME_COUNT)
-        frames.append(transformed(source, dy=round(-wave), scale_x=1.0 - 0.008 * wave, scale_y=1.0 + 0.018 * wave))
-    return frames
+    # A calm, readable hop: pause, anticipate, lift, land, settle, then pause.
+    # The source is smooth line art, so use high-quality resampling for the
+    # squash-and-stretch frames while keeping every other pixel-art state crisp.
+    poses = [
+        (0, 1.00, 1.00),
+        (0, 1.00, 1.00),
+        (0, 1.00, 1.00),
+        (0, 1.00, 1.00),
+        (1, 1.02, 0.97),
+        (2, 1.05, 0.92),
+        (-2, 0.98, 1.05),
+        (-6, 0.98, 1.04),
+        (-10, 0.99, 1.02),
+        (-13, 1.00, 1.00),
+        (-12, 1.00, 1.00),
+        (-9, 1.00, 1.00),
+        (-5, 0.99, 1.02),
+        (-1, 0.99, 1.03),
+        (0, 1.06, 0.91),
+        (-1, 0.98, 1.04),
+        (0, 1.02, 0.97),
+        (0, 1.00, 1.00),
+        (0, 1.00, 1.00),
+        (0, 1.00, 1.00),
+    ]
+    return [
+        transformed(
+            source,
+            dy=dy,
+            scale_x=scale_x,
+            scale_y=scale_y,
+            resample=Image.Resampling.LANCZOS,
+        )
+        for dy, scale_x, scale_y in poses
+    ]
 
 
 def sleeping_frames(source: Image.Image) -> list[Image.Image]:
@@ -107,32 +171,72 @@ def sleeping_frames(source: Image.Image) -> list[Image.Image]:
 
 
 def thinking_frames(source: Image.Image) -> list[Image.Image]:
+    ponder = load_pose("thinking-agumon-ponder")
+    idea = load_pose("thinking-agumon-idea")
+    poses = (
+        [source] * 4
+        + [ponder] * 6
+        + [source] * 2
+        + [idea] * 4
+        + [source] * 4
+    )
     frames = []
-    for index in range(FRAME_COUNT):
-        wave = math.sin(index * math.tau / FRAME_COUNT)
-        frame = transformed(source, dy=round(-1.5 * max(0.0, wave)))
+    for index, pose in enumerate(poses):
+        frame = Image.new("RGBA", (CANVAS_WIDTH, CANVAS_HEIGHT), (0, 0, 0, 0))
         draw = ImageDraw.Draw(frame)
-        pulse = 2 + (1 if index % 10 in (3, 4, 5, 6) else 0)
-        star(draw, 91, 19, (255, 209, 102, 255), pulse)
-        if index % 10 in (5, 6):
-            star(draw, 102, 31, (244, 193, 167, 255), 1)
+        pulse = 1 if index % 4 in (0, 3) else 2
+        draw.ellipse((5, 63, 5 + pulse, 63 + pulse), fill=(244, 193, 167, 255))
+        draw.ellipse((119, 112, 121, 114), fill=(143, 224, 199, 255))
+        if 4 <= index <= 9:
+            draw.ellipse((16, 39, 19, 42), fill=(244, 193, 167, 255))
+            draw.ellipse((9, 28, 14, 33), fill=(255, 243, 232, 255))
+            star(draw, 16, 17, (255, 209, 102, 255), 2 + (index % 2))
+        elif 12 <= index <= 15:
+            star(draw, 114, 20, (255, 209, 102, 255), 4 if index in (13, 14) else 3)
+            star(draw, 120, 50, (255, 243, 232, 255), 2)
+            draw.ellipse((7, 91, 10, 94), fill=(143, 224, 199, 255))
+        else:
+            draw.ellipse((11, 31, 14, 34), fill=(255, 243, 232, 255))
+            draw.ellipse((17, 22, 21, 26), fill=(244, 193, 167, 255))
+        frame.alpha_composite(pose)
         frames.append(frame)
     return frames
 
 
 def notification_frames(source: Image.Image) -> list[Image.Image]:
-    bounce = [0, -2, -5, -8, -5, -2, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    waiting = load_pose("notification-agumon-wait")
+    prompt = load_pose("notification-agumon-prompt")
+    poses = (
+        [source] * 4
+        + [waiting] * 4
+        + [source] * 2
+        + [prompt] * 5
+        + [waiting] * 2
+        + [source] * 3
+    )
     frames = []
-    for index in range(FRAME_COUNT):
-        shake = (-1 if index % 2 else 1) if 2 <= index <= 7 else 0
-        frame = transformed(source, dx=shake, dy=bounce[index])
+    for index, pose in enumerate(poses):
+        frame = Image.new("RGBA", (CANVAS_WIDTH, CANVAS_HEIGHT), (0, 0, 0, 0))
         draw = ImageDraw.Draw(frame)
-        if 1 <= index <= 8:
-            color = (255, 209, 102, 255)
-            draw.rectangle((105, 23, 108, 31), fill=color)
-            draw.rectangle((106, 35, 108, 37), fill=color)
-            draw.line((96, 27, 91, 23), fill=color, width=2)
-            draw.line((115, 27, 121, 23), fill=color, width=2)
+        dim = (169, 77, 55, 255)
+        bright = (255, 209, 102, 255)
+        draw.rectangle((5, 34, 7, 36), fill=bright if index % 4 < 2 else dim)
+        draw.rectangle((120, 102, 122, 104), fill=dim)
+        draw.rectangle((8, 145, 9, 146), fill=(143, 224, 199, 255))
+        if 4 <= index <= 7 or 15 <= index <= 16:
+            draw.ellipse((8, 25, 11, 28), fill=(244, 193, 167, 255))
+            draw.ellipse((14, 19, 18, 23), fill=(255, 243, 232, 255))
+            draw.arc((3, 47, 21, 65), 105, 255, fill=dim, width=2)
+        elif 10 <= index <= 14:
+            draw.arc((3, 21, 28, 46), 105, 255, fill=bright, width=2)
+            draw.arc((7, 25, 24, 42), 105, 255, fill=(244, 193, 167, 255), width=2)
+            star(draw, 115, 18, bright, 3 + (index % 2))
+            star(draw, 121, 61, (255, 243, 232, 255), 2)
+        else:
+            draw.line((112, 22, 118, 16), fill=bright, width=2)
+            draw.line((118, 31, 126, 31), fill=bright, width=2)
+            draw.line((113, 40, 120, 46), fill=bright, width=2)
+        frame.alpha_composite(pose)
         frames.append(frame)
     return frames
 
@@ -226,7 +330,13 @@ ANIMATORS: dict[str, Callable[[Image.Image], list[Image.Image]]] = {
 
 def rgba_to_fixed_palette(frames: list[Image.Image]) -> tuple[list[Image.Image], int]:
     """Quantize every frame against one palette so LVGL sees stable colors."""
-    atlas = Image.new("RGB", (SIZE, SIZE * len(frames)), CHROMA_KEY)
+    if not frames:
+        raise ValueError("cannot quantize an empty animation")
+    frame_size = frames[0].size
+    if any(frame.size != frame_size for frame in frames):
+        raise ValueError("all animation frames must use the same canvas size")
+    width, height = frame_size
+    atlas = Image.new("RGB", (width, height * len(frames)), CHROMA_KEY)
     rgb_frames: list[Image.Image] = []
     alpha_frames: list[Image.Image] = []
     for index, frame in enumerate(frames):
@@ -234,7 +344,7 @@ def rgba_to_fixed_palette(frames: list[Image.Image]) -> tuple[list[Image.Image],
         binary_alpha = alpha.point(lambda value: 255 if value >= 128 else 0)
         rgb = Image.new("RGB", frame.size, CHROMA_KEY)
         rgb.paste(frame.convert("RGB"), (0, 0), binary_alpha)
-        atlas.paste(rgb, (0, index * SIZE))
+        atlas.paste(rgb, (0, index * height))
         rgb_frames.append(rgb)
         alpha_frames.append(alpha)
 
@@ -258,13 +368,31 @@ def rgba_to_fixed_palette(frames: list[Image.Image]) -> tuple[list[Image.Image],
     for rgb, alpha in zip(rgb_frames, alpha_frames):
         indexed = rgb.quantize(palette=palette_seed, dither=Image.Dither.NONE)
         transparent_mask = alpha.point(lambda value: 255 if value < 128 else 0)
-        indexed.paste(transparency, (0, 0, SIZE, SIZE), transparent_mask)
+        indexed.paste(transparency, (0, 0, width, height), transparent_mask)
         indexed_frames.append(indexed)
     return indexed_frames, transparency
 
 
+def fit_to_session_canvas(frame: Image.Image) -> Image.Image:
+    """Center one frame on the 130 x 180 session canvas without distortion."""
+    frame = frame.convert("RGBA")
+    if frame.width > CANVAS_WIDTH or frame.height > CANVAS_HEIGHT:
+        scale = min(CANVAS_WIDTH / frame.width, CANVAS_HEIGHT / frame.height)
+        fitted_size = (
+            max(1, round(frame.width * scale)),
+            max(1, round(frame.height * scale)),
+        )
+        frame = frame.resize(fitted_size, Image.Resampling.LANCZOS)
+    canvas = Image.new("RGBA", (CANVAS_WIDTH, CANVAS_HEIGHT), (0, 0, 0, 0))
+    left = (CANVAS_WIDTH - frame.width) // 2
+    top = (CANVAS_HEIGHT - frame.height) // 2
+    canvas.alpha_composite(frame, (left, top))
+    return canvas
+
+
 def save_transparent_gif(path: Path, frames: list[Image.Image]) -> None:
-    indexed, transparency = rgba_to_fixed_palette(frames)
+    fitted_frames = [fit_to_session_canvas(frame) for frame in frames]
+    indexed, transparency = rgba_to_fixed_palette(fitted_frames)
     indexed[0].save(
         path,
         save_all=True,
@@ -278,13 +406,21 @@ def save_transparent_gif(path: Path, frames: list[Image.Image]) -> None:
 
 
 def save_preview(animations: dict[str, list[Image.Image]]) -> None:
+    fitted = {
+        name: [fit_to_session_canvas(frame) for frame in frames]
+        for name, frames in animations.items()
+    }
     preview_frames = []
     for frame_index in range(FRAME_COUNT):
-        frame = Image.new("RGBA", (SIZE * 4, SIZE * 2), PREVIEW_BG)
+        frame = Image.new(
+            "RGBA",
+            (CANVAS_WIDTH * 4, CANVAS_HEIGHT * 2),
+            PREVIEW_BG,
+        )
         for state_index, name in enumerate(STATE_NAMES):
-            x = (state_index % 4) * SIZE
-            y = (state_index // 4) * SIZE
-            frame.alpha_composite(animations[name][frame_index], (x, y))
+            x = (state_index % 4) * CANVAS_WIDTH
+            y = (state_index // 4) * CANVAS_HEIGHT
+            frame.alpha_composite(fitted[name][frame_index], (x, y))
         preview_frames.append(frame.convert("RGB").quantize(colors=255, method=Image.Quantize.MEDIANCUT))
     preview_frames[0].save(
         PREVIEW_PATH,

@@ -262,6 +262,14 @@ local EVENT_ALIASES = {
 }
 
 local SESSION_VISUAL_DIR = APP_DIR .. "/assets/agumon/session/"
+local SESSION_VISUAL_PANEL_WIDTH = 132
+local SESSION_VISUAL_PANEL_HEIGHT = 181
+local SESSION_VISUAL_WIDTH = 130
+local SESSION_VISUAL_HEIGHT = 180
+local SESSION_VISUAL_X = math.floor(
+  (SESSION_VISUAL_PANEL_WIDTH - SESSION_VISUAL_WIDTH) / 2)
+local SESSION_VISUAL_Y = math.floor(
+  (SESSION_VISUAL_PANEL_HEIGHT - SESSION_VISUAL_HEIGHT) / 2)
 local SESSION_STATE_VISUALS = {
   idle = { path = SESSION_VISUAL_DIR .. "idle-koromon.gif", label = T("KOROMON // IDLE", "滚球兽 // 待命") },
   sleeping = { path = SESSION_VISUAL_DIR .. "sleeping-koromon.gif", label = T("KOROMON // SLEEP", "滚球兽 // 休眠") },
@@ -943,7 +951,7 @@ style_text(APP.ui.weather_tomorrow_rain, C.dim, FONT_10, ALIGN_LEFT)
 set_text(APP.ui.weather_tomorrow_rain, T("R--% 0.0mm G--", "雨--% 0.0mm 风--"))
 
 -- Session instrument: the left rail is a compact live trace; the right side
--- reserves a native 128 x 128 frame for Clawd's meme loops.
+-- reserves a native 130 x 180 frame for state-specific mascot loops.
 APP.ui.session_page = lv_obj_create(root)
 lv_obj_set_size(APP.ui.session_page, W, H)
 lv_obj_set_pos(APP.ui.session_page, 0, 0)
@@ -999,17 +1007,20 @@ for i = 1, 6 do
 end
 
 APP.ui.session_meme_panel = lv_obj_create(APP.ui.session_page)
-lv_obj_set_size(APP.ui.session_meme_panel, 132, 181)
+lv_obj_set_size(
+  APP.ui.session_meme_panel,
+  SESSION_VISUAL_PANEL_WIDTH,
+  SESSION_VISUAL_PANEL_HEIGHT)
 lv_obj_set_pos(APP.ui.session_meme_panel, 180, 24)
 set_bg(APP.ui.session_meme_panel, C.panel, 255, 0)
-lv_obj_set_style_border_width(APP.ui.session_meme_panel, 2, MAIN)
+lv_obj_set_style_border_width(APP.ui.session_meme_panel, 1, MAIN)
 lv_obj_set_style_border_color(APP.ui.session_meme_panel, C.rust, MAIN)
 lv_obj_set_style_border_opa(APP.ui.session_meme_panel, 230, MAIN)
 
 APP.ui.session_gifs = {}
 for i = 1, 2 do
   local gif = lv_gif_create(APP.ui.session_meme_panel)
-  lv_obj_set_pos(gif, 0, 26)
+  lv_obj_set_pos(gif, SESSION_VISUAL_X, SESSION_VISUAL_Y)
   set_hidden(gif, i ~= 1)
   APP.ui.session_gifs[i] = gif
 end
@@ -1325,7 +1336,13 @@ local function set_session_meme(force)
   local meme = SESSION_STATE_VISUALS[state] or SESSION_STATE_VISUALS.idle
   if APP.page ~= "session" or (not force and APP.session_meme_loaded == meme.path) then return end
   if force then APP.session_meme_loaded = nil end
-  if swap_gif("session", meme.path, 0, 26) then APP.session_meme_loaded = meme.path end
+  if swap_gif(
+      "session",
+      meme.path,
+      SESSION_VISUAL_X,
+      SESSION_VISUAL_Y) then
+    APP.session_meme_loaded = meme.path
+  end
 end
 
 

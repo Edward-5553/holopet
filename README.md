@@ -9,8 +9,8 @@ Agumon evolution line.
 
 ## Display
 
-- Codex state animations are native 160 x 160 indexed GIFs. There is no runtime
-  scaling or cropped desktop artwork.
+- Session state animations are native 130 x 180 indexed GIFs, matching the
+  current right-side animation area without runtime scaling.
 - IDLE rotates every random 2 to 5 whole minutes through 24 narrative loops:
   12 everyday micro-stories with two reactions/directions each. Every story
   uses varied frame timing, a calm setup, an interaction, and a seamless return
