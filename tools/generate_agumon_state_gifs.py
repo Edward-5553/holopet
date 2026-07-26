@@ -14,6 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE_DIR = ROOT / "art" / "agumon-states" / "png"
 OUTPUT_DIR = ROOT / "package" / "assets" / "agumon" / "session"
 PREVIEW_PATH = ROOT / "art" / "agumon-states" / "agumon-state-animated-preview.gif"
+WORKING_KEYFRAMES_PATH = SOURCE_DIR / "working-greymon-keyframes.png"
+BUILDING_KEYFRAMES_PATH = SOURCE_DIR / "building-metalgreymon-keyframes.png"
 
 # Existing source art is 128 x 128, while every runtime GIF uses the fixed
 # portrait canvas reserved by the session UI. Keeping these dimensions separate
@@ -50,6 +52,59 @@ POSE_NAMES = {
     "notification-agumon-prompt",
 }
 
+# The approved working animation is stored as a 2 x 2 contact sheet. These
+# bounds omit the outer frame and the center divider drawn by image generation.
+WORKING_KEYFRAME_BOXES = (
+    (4, 4, 529, 736),
+    (534, 4, 1060, 736),
+    (4, 742, 529, 1474),
+    (534, 742, 1060, 1474),
+)
+
+
+# MetalGreymon's build animation is a 2 x 2 portrait contact sheet: crouch,
+# chest bays open, missile launch, then recovery. The source panels are taller
+# than wide so the character fits the fixed session display without clipping.
+BUILDING_KEYFRAME_BOXES = (
+    (0, 0, 532, 738),
+    (533, 0, 1065, 738),
+    (0, 739, 532, 1477),
+    (533, 739, 1065, 1477),
+)
+# Limited-animation timing: effort, charge, fireball, and recoil. Repeating
+# poses provides deliberate holds while one-pixel offsets add breathing,
+# charging tension, impact shake, and recovery motion.
+WORKING_TIMELINE = (
+    (0, 0, 0),
+    (0, 0, -1),
+    (0, 0, 0),
+    (0, 0, 1),
+    (1, 0, 1),
+    (1, 0, 0),
+    (1, 0, -1),
+    (1, 0, 0),
+    (2, -1, 0),
+    (2, 1, 0),
+    (2, -1, 0),
+    (3, 1, 0),
+    (3, 0, 0),
+    (3, -1, 0),
+    (3, 0, 0),
+    (3, 0, 1),
+    (0, 0, 1),
+    (0, 0, 0),
+    (0, 0, -1),
+    (0, 0, 0),
+)
+BUILDING_TIMELINE = (
+    (0, 0, 0), (0, 0, 1), (0, 0, 0), (0, 0, 0),
+    (1, 0, 0), (1, 0, -1), (1, 0, 0), (1, 0, 0),
+    (2, -1, 1), (2, 1, 0), (2, -1, 0), (2, 1, 1),
+    (3, 0, 1), (3, 0, 0), (3, 0, 0), (3, 0, -1),
+    (0, 0, 0), (0, 0, 0), (0, 0, 1), (0, 0, 0),
+)
+
+
 
 def load_sprite(name: str) -> Image.Image:
     path = SOURCE_DIR / f"{name}.png"
@@ -74,6 +129,41 @@ def load_pose(name: str) -> Image.Image:
     if image.getchannel("A").getbbox() is None:
         raise ValueError(f"{path} has no visible pixels")
     return image
+
+
+def load_working_keyframes() -> list[Image.Image]:
+    image = Image.open(WORKING_KEYFRAMES_PATH).convert("RGBA")
+    if image.size != (1064, 1478):
+        raise ValueError(
+            f"{WORKING_KEYFRAMES_PATH} must be 1064x1478, got "
+            f"{image.width}x{image.height}"
+        )
+    frames = [
+        fit_to_session_canvas(image.crop(box), padding=2)
+        for box in WORKING_KEYFRAME_BOXES
+    ]
+    if any(frame.getchannel("A").getbbox() is None for frame in frames):
+        raise ValueError(f"{WORKING_KEYFRAMES_PATH} contains an empty keyframe")
+    return frames
+
+def load_building_keyframes() -> list[Image.Image]:
+    image = Image.open(BUILDING_KEYFRAMES_PATH).convert("RGBA")
+    if image.size != (1065, 1477):
+        raise ValueError(
+            f"{BUILDING_KEYFRAMES_PATH} must be 1065x1477, got "
+            f"{image.width}x{image.height}"
+        )
+    frames = [fit_to_session_canvas(image.crop(box)) for box in BUILDING_KEYFRAME_BOXES]
+    if any(frame.getchannel("A").getbbox() is None for frame in frames):
+        raise ValueError(f"{BUILDING_KEYFRAMES_PATH} contains an empty keyframe")
+
+    return frames
+def offset_opaque_frame(frame: Image.Image, dx: int, dy: int) -> Image.Image:
+    """Move a full-panel keyframe while extending its sampled dark backdrop."""
+    backdrop = frame.getpixel((0, 0))
+    result = Image.new("RGBA", frame.size, backdrop)
+    result.alpha_composite(frame, (dx, dy))
+    return result
 
 
 def transformed(
@@ -242,34 +332,41 @@ def notification_frames(source: Image.Image) -> list[Image.Image]:
 
 
 def working_frames(source: Image.Image) -> list[Image.Image]:
-    frames = []
-    for index in range(FRAME_COUNT):
-        wave = math.sin(index * math.tau / FRAME_COUNT)
-        effects = Image.new("RGBA", source.size, (0, 0, 0, 0))
-        draw = ImageDraw.Draw(effects)
-        for lane in range(3):
-            x = 8 + ((index * 7 + lane * 29) % 42)
-            y = 47 + lane * 18
-            draw.rectangle((x, y, x + 13 + lane * 3, y + 2), fill=(244, 193, 167, 210))
-        frame = transformed(source, dx=round(2 * wave), dy=-1 if index % 4 in (1, 2) else 0)
-        effects.alpha_composite(frame)
-        frames.append(effects)
-    return frames
+    del source  # This state uses the approved multi-pose artwork instead.
+    keyframes = load_working_keyframes()
+    return [
+        offset_opaque_frame(keyframes[pose_index], dx, dy)
+        for pose_index, dx, dy in WORKING_TIMELINE
+    ]
+
+
+def building_backdrop(index: int) -> Image.Image:
+    frame = Image.new("RGBA", (CANVAS_WIDTH, CANVAS_HEIGHT), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(frame)
+    scan_y = 18 + (index * 13) % 142
+    draw.line((6, scan_y, 20, scan_y), fill=(143, 224, 199, 96), width=1)
+    draw.line((109, 180 - scan_y, 124, 180 - scan_y), fill=(244, 193, 167, 96), width=1)
+    for lane in range(3):
+        y = 20 + lane * 19
+        width = 5 + ((index + lane) % 3) * 3
+        draw.rectangle((7, y, 7 + width, y + 1), fill=(143, 224, 199, 110))
+        draw.rectangle((116 - width, y + 9, 116, y + 10), fill=(244, 193, 167, 110))
+    for spark_index in range(4):
+        x = 11 + (index * 17 + spark_index * 29) % 108
+        y = 26 + (index * 11 + spark_index * 37) % 120
+        star(draw, x, y, (255, 209, 102, 168), 2 if spark_index == index % 4 else 1)
+    return frame
 
 
 def building_frames(source: Image.Image) -> list[Image.Image]:
+    del source  # This state uses the purpose-drawn multi-pose artwork instead.
+    keyframes = load_building_keyframes()
     frames = []
-    spark_positions = [(26, 101), (38, 91), (48, 108), (18, 87), (57, 97)]
-    for index in range(FRAME_COUNT):
-        strike = index % 10
-        frame = transformed(source, dy=2 if strike in (4, 5) else 0)
-        draw = ImageDraw.Draw(frame)
-        if strike in (4, 5, 6):
-            count = 5 if strike == 5 else 3
-            for spark_index, (x, y) in enumerate(spark_positions[:count]):
-                radius = 3 if spark_index == 0 else 1
-                star(draw, x, y, (255, 209, 102, 255), radius)
-        frames.append(frame)
+    for index, (pose_index, dx, dy) in enumerate(BUILDING_TIMELINE):
+        frame = offset_opaque_frame(keyframes[pose_index], dx, dy)
+        backdrop = building_backdrop(index)
+        backdrop.alpha_composite(frame)
+        frames.append(backdrop)
     return frames
 
 
@@ -373,11 +470,15 @@ def rgba_to_fixed_palette(frames: list[Image.Image]) -> tuple[list[Image.Image],
     return indexed_frames, transparency
 
 
-def fit_to_session_canvas(frame: Image.Image) -> Image.Image:
+def fit_to_session_canvas(frame: Image.Image, padding: int = 0) -> Image.Image:
     """Center one frame on the 130 x 180 session canvas without distortion."""
     frame = frame.convert("RGBA")
-    if frame.width > CANVAS_WIDTH or frame.height > CANVAS_HEIGHT:
-        scale = min(CANVAS_WIDTH / frame.width, CANVAS_HEIGHT / frame.height)
+    if padding < 0 or padding * 2 >= min(CANVAS_WIDTH, CANVAS_HEIGHT):
+        raise ValueError(f"invalid session canvas padding: {padding}")
+    available_width = CANVAS_WIDTH - padding * 2
+    available_height = CANVAS_HEIGHT - padding * 2
+    if frame.width > available_width or frame.height > available_height:
+        scale = min(available_width / frame.width, available_height / frame.height)
         fitted_size = (
             max(1, round(frame.width * scale)),
             max(1, round(frame.height * scale)),
